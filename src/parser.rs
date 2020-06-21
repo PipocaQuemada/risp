@@ -5,19 +5,19 @@ use std::str::SplitWhitespace;
 
 pub mod parser_combinator {
     extern crate nom;
+    use crate::ast::LispVal;
     use nom::{
         branch::alt,
         bytes::complete::{escaped, tag},
-        character::complete::{none_of, one_of, alpha1, alphanumeric1, digit1, space1},
-        combinator::{map, flat_map},
-        multi::{many0, separated_nonempty_list},
+        character::complete::{alpha1, alphanumeric1, digit1, none_of, one_of, space1},
+        combinator::{flat_map, map},
         do_parse,
+        multi::{many0, separated_nonempty_list},
         named,
         sequence::{delimited, separated_pair},
         IResult,
     };
     use std::str::FromStr;
-    use crate::ast::LispVal;
 
     pub fn boolean(i: &str) -> IResult<&str, LispVal> {
         let t = map(tag("#t"), |_t| LispVal::Bool(true));
@@ -33,61 +33,76 @@ pub mod parser_combinator {
     // one_of returns a parser of char, while alpha1 returns a parser of &str.
     // to get the types to line up, use one_of to reimplement alpha1 for now.
     pub fn symbol(i: &str) -> IResult<&str, char> {
-      one_of("!#$%&|*+-/:<=>?@^_~")(i)
+        one_of("!#$%&|*+-/:<=>?@^_~")(i)
     }
     pub fn alpha(i: &str) -> IResult<&str, char> {
-      one_of("qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM")(i)
+        one_of("qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM")(i)
     }
     pub fn alphanumeric(i: &str) -> IResult<&str, char> {
-      one_of("qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890")(i)
+        one_of("qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890")(i)
     }
 
-
     pub fn atom(i: &str) -> IResult<&str, LispVal> {
-      let first = alt((alpha,symbol));
-      //let rest = many0(alt((alphanumeric,symbol)) );
-      fn rest(i: &str) -> IResult<&str, Vec<char>> {
-        many0(alt((alphanumeric,symbol)))(i)
-      };
-      flat_map(first, |f| map(rest, move |r| {
-        let mut string = String::new();
-        string.push(f);
-        for c in r {
-          string.push(c);
-        }
-        LispVal::Atom(string)
-      }))(i)
+        let first = alt((alpha, symbol));
+        //let rest = many0(alt((alphanumeric,symbol)) );
+        fn rest(i: &str) -> IResult<&str, Vec<char>> {
+            many0(alt((alphanumeric, symbol)))(i)
+        };
+        flat_map(first, |f| {
+            map(rest, move |r| {
+                let mut string = String::new();
+                string.push(f);
+                for c in r {
+                    string.push(c);
+                }
+                LispVal::Atom(string)
+            })
+        })(i)
     }
 
     pub fn number(i: &str) -> IResult<&str, LispVal> {
-      map(digit1, |s| LispVal::Number(i32::from_str(s).unwrap()))(i)
+        map(digit1, |s| LispVal::Number(i32::from_str(s).unwrap()))(i)
     }
 
     pub fn list(i: &str) -> IResult<&str, LispVal> {
-      map(separated_nonempty_list(space1, expr), |exprs| LispVal::List( exprs ) )(i)
+        fn toList(exprs: Vec<LispVal>) -> LispVal {
+            let mut list = LispVal::Nil;
+            for e in exprs.iter().rev() {
+                list = LispVal::cons(e.clone(), list)
+            }
+            list
+        }
+
+        map(separated_nonempty_list(space1, expr), |exprs| toList(exprs))(i)
     }
 
-
-      /*
-    pub fn dottedList(i: &str) -> IResult<&str, LispVal> {
-      flat_map(separated_nonempty_list(space1, expr), |first| {
-        flat_map(space1, |_| {
-        flat_map(tag("."), |_| {
-        flat_map(space1, |_| {
-        map(expr, |end| {
-            LispVal::DottedList(first, Box::new(end))
-        })})})})})(i)
-  }
-      */
-
+    /*
+        todo: running into lifetime issues; figure out later
+        // e.g. cannot move out of `first`, a captured variable in an `Fn` closure
+        pub fn dottedList(i: &str) -> IResult<&str, LispVal> {
+          fn toList(exprs: &Vec<LispVal>, last: LispVal) -> LispVal {
+            let mut list = last;
+            for e in exprs.iter().rev() {
+              list = LispVal::cons(e.clone(), list)
+            }
+            list
+          }
+          flat_map(separated_nonempty_list(space1, expr), |first| {
+            flat_map(space1, |_| {
+            flat_map(tag("."), |_| {
+            flat_map(space1, |_| {
+            map(expr, |end| {
+                toList(&first, end.clone())
+            })})})})})(i)
+      }
+    */
 
     // Only thing remaining: dotted list
     pub fn expr(i: &str) -> IResult<&str, LispVal> {
-      alt((atom, number, string, boolean, list))(i)
+        alt((atom, number, string, boolean, list))(i)
     }
 
 }
-
 
 mod recursive_descent {
     /*

@@ -1,4 +1,4 @@
-use risp::ast::LispVal::{Bool, Str, Atom};
+use risp::ast::LispVal::{Atom, Bool, Str};
 use risp::parser::parser_combinator;
 
 use nom::combinator::all_consuming;
@@ -23,7 +23,6 @@ fn test_parse_fail_not_true() {
     //parse("#tf");
 }
 
-/*
 #[test]
 fn test_parse_atom() {
     fn parseSuccess(string: &str) {
@@ -43,4 +42,3 @@ fn test_parse_atom() {
     parseFailed("1");
     parseFailed("\\");
 }
-*/
