@@ -1,5 +1,7 @@
 pub mod parser_combinator {
     extern crate nom;
+    use crate::ast::LispErr;
+    use crate::ast::LispErr::ParseError;
     use crate::ast::LispVal;
     use nom::{
         branch::alt,
@@ -125,8 +127,10 @@ pub mod parser_combinator {
         alt((atom, number, string, boolean, dotted_list, list, quoted))(i)
     }
 
-    pub fn scheme(i: &str) -> IResult<&str, LispVal> {
+    pub fn scheme(i: &str) -> Result<LispVal, LispErr> {
         all_consuming(expr)(i)
+            .map(|(_, expr)| expr)
+            .map_err(|err| ParseError(i.to_string()))
     }
 }
 

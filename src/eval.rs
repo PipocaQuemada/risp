@@ -9,10 +9,10 @@ use LispErr::*;
 pub fn eval(env: &Env, e: &LispVal) -> Result<LispVal, LispErr> {
     match e {
         Nil | Number(_) | Str(_) | Bool(_) => Ok(e.clone()),
-        Atom(a) => env.get(a).cloned().ok_or_else(|| UnboundVar(
-            "Retrieved an unbound variable".to_string(),
-            a.clone(),
-        )),
+        Atom(a) => env
+            .get(a)
+            .cloned()
+            .ok_or_else(|| UnboundVar("Retrieved an unbound variable".to_string(), a.clone())),
         ConsList(c) => {
             match &*c.car {
                 Atom(a) => {
@@ -45,10 +45,12 @@ pub fn eval_args(env: &Env, args: &LispVal) -> Result<Vec<LispVal>, LispErr> {
 }
 
 pub fn apply(func: &str, args: &[LispVal]) -> Result<LispVal, LispErr> {
-    apply_prim(func, args).unwrap_or_else(|| Err(NotFunction(
-        func.to_string(),
-        "is not a function".to_string(),
-    )))
+    apply_prim(func, args).unwrap_or_else(|| {
+        Err(NotFunction(
+            func.to_string(),
+            "is not a function".to_string(),
+        ))
+    })
 }
 
 pub fn apply_prim(func: &str, args: &[LispVal]) -> Option<Result<LispVal, LispErr>> {
