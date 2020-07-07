@@ -1,8 +1,3 @@
-use crate::ast;
-
-use std::borrow::Cow;
-use std::str::SplitWhitespace;
-
 pub mod parser_combinator {
     extern crate nom;
     use crate::ast::LispVal;
@@ -10,7 +5,7 @@ pub mod parser_combinator {
         branch::alt,
         bytes::complete::{escaped, tag},
         character::complete::{alpha1, alphanumeric1, digit1, none_of, one_of, space1},
-        combinator::{flat_map, map, all_consuming},
+        combinator::{all_consuming, flat_map, map},
         do_parse,
         multi::{many0, separated_nonempty_list},
         named,
@@ -70,7 +65,7 @@ pub mod parser_combinator {
     }
 
     pub fn list(i: &str) -> IResult<&str, LispVal> {
-        fn toList(exprs: Vec<LispVal>) -> LispVal {
+        fn to_list(exprs: Vec<LispVal>) -> LispVal {
             let mut list = LispVal::Nil;
             for e in exprs.iter().rev() {
                 list = LispVal::cons(e.clone(), list)
@@ -78,10 +73,12 @@ pub mod parser_combinator {
             list
         }
 
-        let listContents = map(separated_nonempty_list(space1, expr), |exprs| toList(exprs));
+        let list_contents = map(separated_nonempty_list(space1, expr), |exprs| {
+            to_list(exprs)
+        });
 
         let empty = map(tag("()"), |_| LispVal::Nil);
-        let non_empty = delimited(tag("("), listContents, tag(")"));
+        let non_empty = delimited(tag("("), list_contents, tag(")"));
         alt((empty, non_empty))(i)
     }
 
@@ -97,7 +94,7 @@ pub mod parser_combinator {
     }
 
     pub fn dotted_list(i: &str) -> IResult<&str, LispVal> {
-        fn toList(exprs: &Vec<LispVal>, last: LispVal) -> LispVal {
+        fn to_list(exprs: &[LispVal], last: LispVal) -> LispVal {
             let mut list = last;
             for e in exprs.iter().rev() {
                 list = LispVal::cons(e.clone(), list)
@@ -111,13 +108,13 @@ pub mod parser_combinator {
           flat_map(tag("."), |_| {
           flat_map(space1, |_| {
           map(expr, |end| {
-              toList(&first, end)
+              to_list(&first, end)
           })})})})})(i)
         */
 
         let contents = flat_map(separated_nonempty_list(space1, expr), |first| {
             map(delimited(tag(" . "), expr, tag("")), move |end| {
-                toList(&first, end)
+                to_list(&first, end)
             })
         });
 

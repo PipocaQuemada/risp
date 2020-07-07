@@ -1,9 +1,8 @@
 use std::fmt;
 use std::fmt::Display;
 use std::rc::Rc;
-use std::sync::Arc;
-use LispVal::*;
 use LispErr::*;
+use LispVal::*;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum LispErr {
@@ -30,7 +29,7 @@ impl LispVal {
     pub fn cons(car: LispVal, cdr: LispVal) -> LispVal {
         ConsList(Rc::new(Cons {
             car: Rc::new(car),
-            cdr: cdr,
+            cdr,
         }))
     }
 
@@ -41,7 +40,10 @@ impl LispVal {
     pub fn integer(&self) -> Result<i32, LispErr> {
         match self {
             Number(i) => Ok(*i),
-            _ => Err(TypeMismatch("Expected an integer".to_string(), self.clone()))
+            _ => Err(TypeMismatch(
+                "Expected an integer".to_string(),
+                self.clone(),
+            )),
         }
     }
 }
@@ -53,14 +55,14 @@ pub struct Cons {
 }
 
 impl Cons {
-    fn fmtCons(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt_cons(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (&*self.car).fmt(f)?;
 
         match &self.cdr {
             Nil => write!(f, ""),
             ConsList(cons) => {
                 write!(f, " ")?;
-                (&*cons).fmtCons(f)
+                (&*cons).fmt_cons(f)
             }
             _ => {
                 // Dotted list
@@ -82,7 +84,7 @@ impl fmt::Display for LispVal {
             Nil => write!(f, "()"),
             ConsList(cons) => {
                 write!(f, "(")?;
-                (&**cons).fmtCons(f)?;
+                (&**cons).fmt_cons(f)?;
                 write!(f, ")")
             }
         }
