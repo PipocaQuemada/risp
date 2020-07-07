@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 nom = { version = "5.1.1" }
+rustyline = { version ="6.2.0" }

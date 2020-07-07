@@ -26,11 +26,11 @@ fn test_parse_fail_not_true() {
 #[test]
 fn test_parse_atom() {
     fn parseSuccess(string: &str) {
-        let a = all_consuming(parser_combinator::atom(string));
+        let a = all_consuming(parser_combinator::atom)(string);
         assert_eq!(a, Ok(("", Atom(string.to_string()))))
     }
     fn parseFailed(string: &str) {
-        let a = all_consuming(parser_combinator::atom(string));
+        let a = all_consuming(parser_combinator::atom)(string);
         assert!(a.is_err(), "When parsing {}, result was {:?}", string, a)
     }
     parseSuccess("qwerty");
@@ -41,4 +41,21 @@ fn test_parse_atom() {
     parseSuccess("Q1234!#$%&|*+-/:<=>?@^_~");
     parseFailed("1");
     parseFailed("\\");
+}
+
+#[test]
+fn test_parse_expr() {
+    fn parseSuccess(string: &str) {
+        let a = all_consuming(parser_combinator::expr)(string);
+        assert_eq!(a.map(|e| format!("{}", e.1)), Ok(string.to_string()))
+    }
+    parseSuccess("cons");
+    parseSuccess("1");
+    parseSuccess("()");
+    parseSuccess("(1)");
+    parseSuccess("(1 2)");
+    parseSuccess("\"1\"");
+    parseSuccess("(1 . 2)");
+    parseSuccess("\"1\"");
+    parseSuccess("(define (adder x y) (+ x y))")
 }

@@ -3,6 +3,18 @@ use std::fmt::Display;
 use std::rc::Rc;
 use std::sync::Arc;
 use LispVal::*;
+use LispErr::*;
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum LispErr {
+    TypeMismatch(String, LispVal),
+    BadSpecialForm(String, LispVal),
+    ParseError(String),
+    NotFunction(String, String),
+    UnboundVar(String, String),
+    NumArgs(i32, LispVal),
+    Default(String),
+}
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum LispVal {
@@ -20,6 +32,17 @@ impl LispVal {
             car: Rc::new(car),
             cdr: cdr,
         }))
+    }
+
+    pub fn iter(&self) -> LispIter {
+        LispIter { val: self }
+    }
+
+    pub fn integer(&self) -> Result<i32, LispErr> {
+        match self {
+            Number(i) => Ok(*i),
+            _ => Err(TypeMismatch("Expected an integer".to_string(), self.clone()))
+        }
     }
 }
 
@@ -62,6 +85,27 @@ impl fmt::Display for LispVal {
                 (&**cons).fmtCons(f)?;
                 write!(f, ")")
             }
+        }
+    }
+}
+
+pub struct LispIter<'a> {
+    val: &'a LispVal,
+}
+
+impl<'a> Iterator for LispIter<'a> {
+    type Item = &'a LispVal;
+
+    fn next(&mut self) -> Option<&'a LispVal> {
+        let val = self.val;
+        self.val = match self.val {
+            ConsList(cons) => &(*cons).cdr,
+            _ => &Nil,
+        };
+        match val {
+            ConsList(cons) => Some(&*(*cons).car),
+            Nil => None,
+            _ => Some(self.val),
         }
     }
 }

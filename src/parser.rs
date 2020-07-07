@@ -10,7 +10,7 @@ pub mod parser_combinator {
         branch::alt,
         bytes::complete::{escaped, tag},
         character::complete::{alpha1, alphanumeric1, digit1, none_of, one_of, space1},
-        combinator::{flat_map, map},
+        combinator::{flat_map, map, all_consuming},
         do_parse,
         multi::{many0, separated_nonempty_list},
         named,
@@ -26,9 +26,14 @@ pub mod parser_combinator {
     }
 
     pub fn string(i: &str) -> IResult<&str, LispVal> {
-        let contents = escaped(many0(none_of("\"")), '\\', one_of("n\\\"t"));
+        // TODO: for some reason, using escaped results in the tests spinning forever.
+        // This "works", although it doesn't handle escaping characters.
+
+        //let contents = escaped(many0(none_of("\"")), '\\', one_of("n\\\"t"));
+        // map(string, |s: &str| LispVal::Str(s.into()))(i)
+        let contents = many0(none_of("\""));
         let string = delimited(tag("\""), contents, tag("\""));
-        map(string, |s: &str| LispVal::Str(s.into()))(i)
+        map(string, |s: Vec<char>| LispVal::Str(s.into_iter().collect()))(i)
     }
     // one_of returns a parser of char, while alpha1 returns a parser of &str.
     // to get the types to line up, use one_of to reimplement alpha1 for now.
@@ -73,35 +78,59 @@ pub mod parser_combinator {
             list
         }
 
-        map(separated_nonempty_list(space1, expr), |exprs| toList(exprs))(i)
+        let listContents = map(separated_nonempty_list(space1, expr), |exprs| toList(exprs));
+
+        let empty = map(tag("()"), |_| LispVal::Nil);
+        let non_empty = delimited(tag("("), listContents, tag(")"));
+        alt((empty, non_empty))(i)
     }
 
-    /*
-        todo: running into lifetime issues; figure out later
-        // e.g. cannot move out of `first`, a captured variable in an `Fn` closure
-        pub fn dottedList(i: &str) -> IResult<&str, LispVal> {
-          fn toList(exprs: &Vec<LispVal>, last: LispVal) -> LispVal {
+    pub fn quoted(i: &str) -> IResult<&str, LispVal> {
+        flat_map(tag("\'"), |_| {
+            map(expr, |e| {
+                LispVal::cons(
+                    LispVal::Atom("quote".to_string()),
+                    LispVal::cons(e, LispVal::Nil),
+                )
+            })
+        })(i)
+    }
+
+    pub fn dotted_list(i: &str) -> IResult<&str, LispVal> {
+        fn toList(exprs: &Vec<LispVal>, last: LispVal) -> LispVal {
             let mut list = last;
             for e in exprs.iter().rev() {
-              list = LispVal::cons(e.clone(), list)
+                list = LispVal::cons(e.clone(), list)
             }
             list
-          }
-          flat_map(separated_nonempty_list(space1, expr), |first| {
-            flat_map(space1, |_| {
-            flat_map(tag("."), |_| {
-            flat_map(space1, |_| {
-            map(expr, |end| {
-                toList(&first, end.clone())
-            })})})})})(i)
-      }
-    */
+        }
 
-    // Only thing remaining: dotted list
-    pub fn expr(i: &str) -> IResult<&str, LispVal> {
-        alt((atom, number, string, boolean, list))(i)
+        /*
+        flat_map(separated_nonempty_list(space1, expr), |first| {
+          flat_map(space1, |_| {
+          flat_map(tag("."), |_| {
+          flat_map(space1, |_| {
+          map(expr, |end| {
+              toList(&first, end)
+          })})})})})(i)
+        */
+
+        let contents = flat_map(separated_nonempty_list(space1, expr), |first| {
+            map(delimited(tag(" . "), expr, tag("")), move |end| {
+                toList(&first, end)
+            })
+        });
+
+        delimited(tag("("), contents, tag(")"))(i)
     }
 
+    pub fn expr(i: &str) -> IResult<&str, LispVal> {
+        alt((atom, number, string, boolean, dotted_list, list, quoted))(i)
+    }
+
+    pub fn scheme(i: &str) -> IResult<&str, LispVal> {
+        all_consuming(expr)(i)
+    }
 }
 
 mod recursive_descent {
