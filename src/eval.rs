@@ -10,9 +10,10 @@ pub fn eval(env: &mut Env, e: &LispVal) -> Result<LispVal, LispErr> {
     // pattern matching really sucks on 'Rc's.  This makes pattern matching really suck for ConsList, so
     // matching on special forms also really sucks.
     // to get around that, transform the cons list into a slice
+    // problem: Atom("foo") and cons(Atom("foo", Nil)) will both be transformed to [Atom("foo")], so we need to test to see if we're matching on a list or not.
     match e.iter().collect::<Vec<&LispVal>>().as_slice() {
-        [Nil] | [Number(_)] | [Str(_)] | [Bool(_)] => Ok(e.clone()),
-        [Atom(a)] => env
+        [Nil] | [Number(_)] | [Str(_)] | [Bool(_)] if !e.is_cons() => Ok(e.clone()),
+        [Atom(a)] if !e.is_cons() => env
             .get(a)
             .cloned()
             .ok_or_else(|| UnboundVar("Retrieved an unbound variable".to_string(), a.clone())),

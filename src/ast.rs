@@ -26,6 +26,13 @@ pub enum LispVal {
 }
 
 impl LispVal {
+    pub fn is_cons(&self) -> bool {
+        match self {
+            ConsList(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn cons(car: LispVal, cdr: LispVal) -> LispVal {
         ConsList(Rc::new(Cons {
             car: Rc::new(car),
@@ -117,7 +124,7 @@ impl<'a> Iterator for LispIter<'a> {
         match val {
             ConsList(cons) => Some(&*(*cons).car),
             Nil => None,
-            _ => Some(self.val),
+            _ => Some(val),
         }
     }
 }
