@@ -46,6 +46,16 @@ impl LispVal {
             )),
         }
     }
+
+    pub fn cdr(&self) -> Result<LispVal, LispErr> {
+        match self {
+            ConsList(c) => Ok(c.cdr.clone()),
+            _ => Err(TypeMismatch(
+                "Expected a cons cell".to_string(),
+                self.clone(),
+            )),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

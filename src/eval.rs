@@ -1,40 +1,56 @@
 use crate::ast::LispVal::*;
 use crate::ast::*;
-use std::collections::HashMap;
+use std::collections::hash_map::{Entry, HashMap};
 
 type Env = HashMap<String, LispVal>;
 
 use LispErr::*;
 
-pub fn eval(env: &Env, e: &LispVal) -> Result<LispVal, LispErr> {
-    match e {
-        Nil | Number(_) | Str(_) | Bool(_) => Ok(e.clone()),
-        Atom(a) => env
+pub fn eval(env: &mut Env, e: &LispVal) -> Result<LispVal, LispErr> {
+    // pattern matching really sucks on 'Rc's.  This makes pattern matching really suck for ConsList, so
+    // matching on special forms also really sucks.
+    // to get around that, transform the cons list into a slice
+    match e.iter().collect::<Vec<&LispVal>>().as_slice() {
+        [Nil] | [Number(_)] | [Str(_)] | [Bool(_)] => Ok(e.clone()),
+        [Atom(a)] => env
             .get(a)
             .cloned()
             .ok_or_else(|| UnboundVar("Retrieved an unbound variable".to_string(), a.clone())),
-        ConsList(c) => {
-            match &*c.car {
-                Atom(a) => {
-                    match a.as_str() {
-                        "quote" => Ok(c.cdr.clone()),
-                        //"if" => // todo
-                        _ => {
-                            let args = eval_args(env, &c.cdr)?;
-                            apply(&a, &args)
-                        }
-                    }
-                }
-                _ => Err(BadSpecialForm(
-                    "Unrecognized special form".to_string(),
-                    e.clone(),
-                )), // evalFunction(env, &*c.car, &c.cdr),
-            }
+        [Atom(quote), ..] if quote == "quote" => e.cdr(),
+        [Atom(set), Atom(var), form] if set == "set!" => set_var(env, var.to_string(), form),
+        [Atom(define), Atom(var), form] if define == "define" => {
+            define_var(env, var.to_string(), form)
         }
+        [Atom(a), ..] => {
+            let args = eval_args(env, &(e.cdr()?))?;
+            apply(&a, &args)
+        }
+        _ => Err(BadSpecialForm(
+            "Unrecognized special form".to_string(),
+            e.clone(),
+        )),
     }
 }
 
-pub fn eval_args(env: &Env, args: &LispVal) -> Result<Vec<LispVal>, LispErr> {
+pub fn define_var(env: &mut Env, var: String, form: &LispVal) -> Result<LispVal, LispErr> {
+    Ok(env
+        .entry(var)
+        .and_modify(|e| *e = form.clone())
+        .or_insert_with(|| form.clone())
+        .clone())
+}
+
+pub fn set_var(env: &mut Env, var: String, form: &LispVal) -> Result<LispVal, LispErr> {
+    match env.entry(var) {
+        Entry::Occupied(mut entry) => {
+            entry.insert(form.clone());
+            Ok(form.clone())
+        }
+        Entry::Vacant(_) => Err(UnboundVar("".to_string(), "".to_string())), //todo: err message
+    }
+}
+
+pub fn eval_args(env: &mut Env, args: &LispVal) -> Result<Vec<LispVal>, LispErr> {
     let mut v = Vec::new();
 
     for arg in args.iter() {

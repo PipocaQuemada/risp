@@ -130,7 +130,7 @@ pub mod parser_combinator {
     pub fn scheme(i: &str) -> Result<LispVal, LispErr> {
         all_consuming(expr)(i)
             .map(|(_, expr)| expr)
-            .map_err(|err| ParseError(i.to_string()))
+            .map_err(|err| ParseError(err.to_string()))
     }
 }
 
