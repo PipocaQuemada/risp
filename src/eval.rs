@@ -22,6 +22,14 @@ pub fn eval(env: &mut Env, e: &LispVal) -> Result<LispVal, LispErr> {
         [Atom(define), Atom(var), form] if define == "define" => {
             define_var(env, var.to_string(), form)
         }
+        [Atom(iff), cond, if_branch, else_branch] if iff == "if" => {
+            match eval(env, cond) {
+                Ok(Bool(true)) => eval(env, if_branch),
+                Ok(Bool(false)) => eval(env, else_branch),
+                Ok(expr) => Err(TypeMismatch("if's condition must evaluate to a boolean".to_string(), expr)),
+                e@Err(_) => e
+            }
+        }
         [Atom(a), ..] => {
             let args = eval_args(env, &(e.cdr()?))?;
             apply(&a, &args)
@@ -74,8 +82,86 @@ pub fn apply_prim(func: &str, args: &[LispVal]) -> Option<Result<LispVal, LispEr
     match func {
         "+" => Some(monoidal_numeric_op(|x, y| x + y, 0, args)),
         "*" => Some(monoidal_numeric_op(|x, y| x * y, 1, args)),
+        "quotient" =>  Some(binary_numeric_op(|x, y| Number(x / y), args)),
+        "remainder" => Some(binary_numeric_op(|x, y| Number(x % y), args)),
+        // todo: - and / should really take n args and work as negation/reciprocal for 1 arg
+        "-" => Some(binary_numeric_op(|x, y| Number(x - y), args)),
+        "/" => Some(binary_numeric_op(|x, y| Number(x / y), args)),
+
+        // todo: these should be n-ary
+        "=" => Some(binary_numeric_op(|x, y| Bool(x == y), args)),
+        ">" => Some(binary_numeric_op(|x, y| Bool(x > y), args)),
+        "<" => Some(binary_numeric_op(|x, y| Bool(x < y), args)),
+        ">=" => Some(binary_numeric_op(|x, y| Bool(x >= y), args)),
+        "<=" => Some(binary_numeric_op(|x, y| Bool(x <= y), args)),
+
+        "||" => Some(monoidal_op(|x, y| x || y, |b: &LispVal| b.boolean(),|b| Bool(b), true, args)),
+        "&&" => Some(monoidal_op(|x, y| x && y, |b: &LispVal| b.boolean(),|b| Bool(b), false, args)),
+
+        "eq?" => Some(eqv(args)),
+        "eqv?" => Some(eqv(args)),
+        // todo: equal
+
+        "cons" => Some(binary_op( LispVal::cons, args)),
+        "car" => Some(unary_op( LispVal::car, args)),
         _ => None,
     }
+}
+
+pub fn eqv(args: &[LispVal]) -> Result<LispVal, LispErr> {
+    match args {
+        [Number(x), Number(y)] => Ok(Bool(*x == *y)),
+        [Atom(x), Atom(y)] => Ok(Bool(*x == *y)),
+        [Nil, Nil] => Ok(Bool(true)),
+        [Str(x), Str(y)] => Ok(Bool(*x == *y)),
+        [Bool(x), Bool(y)] => Ok(Bool(*x == *y)),
+        [ConsList(x), ConsList(y)] => if x.car != y.car { Ok(Bool(false)) } else { eqv(&[x.cdr.clone(), y.cdr.clone()]) },
+        _ => Err(NumArgs(2, Nil)), // todo: fix err
+    }
+}
+
+pub fn unary_op<F>(f: F, args: &[LispVal]) -> Result<LispVal, LispErr>
+where
+    F: Fn(&LispVal) -> Result<LispVal, LispErr>,
+{
+    match args {
+        [x] => f(&x),
+        _ => Err(NumArgs(1, Nil)), // todo: fix err
+    }
+}
+
+pub fn binary_op<F>(f: F, args: &[LispVal]) -> Result<LispVal, LispErr>
+where
+    F: Fn(LispVal, LispVal) -> LispVal,
+{
+    match args {
+        [x, y] => Ok(f(x.clone(),y.clone())),
+        _ => Err(NumArgs(2, Nil)), // todo: fix err
+    }
+}
+
+pub fn binary_numeric_op<F>(f: F, args: &[LispVal]) -> Result<LispVal, LispErr>
+where
+    F: Fn(i32, i32) -> LispVal,
+{
+    match args {
+        [Number(x), Number(y)] => Ok(f(*x,*y)),
+        [_, _] => Err(TypeMismatch("Wrong type arguments for primive function".to_string(), Nil)), // todo: fix err
+        _ => Err(NumArgs(2, Nil)), // todo: fix err
+    }
+}
+
+pub fn monoidal_op<F, G, H, A>(f: F, from_lispval: G, to_lispval: H, init: A, args: &[LispVal]) -> Result<LispVal, LispErr>
+where
+    F: Fn(A, A) -> A,
+    G: Fn(&LispVal) -> Result<A, LispErr>,
+    H: Fn(A) -> LispVal,
+{
+    let mut res = init;
+    for arg in args {
+        res = f(res, from_lispval(arg)?);
+    }
+    Ok(to_lispval(res))
 }
 
 // According to the r5rs spec, monoidal numeric functions return the identity element if they're invoked with 0 args
@@ -89,3 +175,4 @@ where
     })?;
     Ok(Number(res))
 }
+

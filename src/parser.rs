@@ -124,7 +124,7 @@ pub mod parser_combinator {
     }
 
     pub fn expr(i: &str) -> IResult<&str, LispVal> {
-        alt((atom, number, string, boolean, dotted_list, list, quoted))(i)
+        alt((boolean, atom, number, string, dotted_list, list, quoted))(i)
     }
 
     pub fn scheme(i: &str) -> Result<LispVal, LispErr> {

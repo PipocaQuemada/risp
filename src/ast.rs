@@ -33,24 +33,13 @@ impl LispVal {
         }
     }
 
-    pub fn cons(car: LispVal, cdr: LispVal) -> LispVal {
-        ConsList(Rc::new(Cons {
-            car: Rc::new(car),
-            cdr,
-        }))
-    }
-
-    pub fn iter(&self) -> LispIter {
-        LispIter { val: self }
-    }
-
-    pub fn integer(&self) -> Result<i32, LispErr> {
+    pub fn car(&self) -> Result<LispVal, LispErr> {
         match self {
-            Number(i) => Ok(*i),
+            // TODO: I don't think this is quite right, but it at least compiles for now.
+            ConsList(c) => Rc::try_unwrap(c.car.clone()).map_err(|_| Default("todo".to_string())),
             _ => Err(TypeMismatch(
-                "Expected an integer".to_string(),
-                self.clone(),
-            )),
+                "Expected an cons cell".to_string(),
+                self.clone())),
         }
     }
 
@@ -63,6 +52,38 @@ impl LispVal {
             )),
         }
     }
+
+    pub fn cons(car: LispVal, cdr: LispVal) -> LispVal {
+        ConsList(Rc::new(Cons {
+            car: Rc::new(car),
+            cdr,
+        }))
+    }
+
+    pub fn iter(&self) -> LispIter {
+        LispIter { val: self }
+    }
+
+    pub fn boolean(&self) -> Result<bool, LispErr> {
+        match self {
+            Bool(b) => Ok(*b),
+            _ => Err(TypeMismatch(
+                "Expected an boolean".to_string(),
+                self.clone(),
+            )),
+        }
+    }
+
+    pub fn integer(&self) -> Result<i32, LispErr> {
+        match self {
+            Number(i) => Ok(*i),
+            _ => Err(TypeMismatch(
+                "Expected an integer".to_string(),
+                self.clone(),
+            )),
+        }
+    }
+
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
