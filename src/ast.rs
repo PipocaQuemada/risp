@@ -35,8 +35,7 @@ impl LispVal {
 
     pub fn car(&self) -> Result<LispVal, LispErr> {
         match self {
-            // TODO: I don't think this is quite right, but it at least compiles for now.
-            ConsList(c) => Rc::try_unwrap(c.car.clone()).map_err(|_| Default("todo".to_string())),
+            ConsList(c) => Ok(c.car.as_ref().clone()),  
             _ => Err(TypeMismatch(
                 "Expected an cons cell".to_string(),
                 self.clone())),
@@ -45,7 +44,7 @@ impl LispVal {
 
     pub fn cdr(&self) -> Result<LispVal, LispErr> {
         match self {
-            ConsList(c) => Ok(c.cdr.clone()),
+            ConsList(c) => Ok(c.cdr.as_ref().clone()),
             _ => Err(TypeMismatch(
                 "Expected a cons cell".to_string(),
                 self.clone(),
@@ -56,7 +55,7 @@ impl LispVal {
     pub fn cons(car: LispVal, cdr: LispVal) -> LispVal {
         ConsList(Rc::new(Cons {
             car: Rc::new(car),
-            cdr,
+            cdr: Rc::new(cdr),
         }))
     }
 
@@ -89,14 +88,14 @@ impl LispVal {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Cons {
     pub car: Rc<LispVal>,
-    pub cdr: LispVal,
+    pub cdr: Rc<LispVal>,
 }
 
 impl Cons {
     fn fmt_cons(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (&*self.car).fmt(f)?;
 
-        match &self.cdr {
+        match &self.cdr.as_ref() {
             Nil => write!(f, ""),
             ConsList(cons) => {
                 write!(f, " ")?;

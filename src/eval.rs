@@ -2,7 +2,7 @@ use crate::ast::LispVal::*;
 use crate::ast::*;
 use std::collections::hash_map::{Entry, HashMap};
 
-type Env = HashMap<String, LispVal>;
+pub type Env = HashMap<String, LispVal>;
 
 use LispErr::*;
 
@@ -104,6 +104,7 @@ pub fn apply_prim(func: &str, args: &[LispVal]) -> Option<Result<LispVal, LispEr
 
         "cons" => Some(binary_op( LispVal::cons, args)),
         "car" => Some(unary_op( LispVal::car, args)),
+        "cdr" => Some(unary_op( LispVal::cdr, args)),
         _ => None,
     }
 }
@@ -115,7 +116,7 @@ pub fn eqv(args: &[LispVal]) -> Result<LispVal, LispErr> {
         [Nil, Nil] => Ok(Bool(true)),
         [Str(x), Str(y)] => Ok(Bool(*x == *y)),
         [Bool(x), Bool(y)] => Ok(Bool(*x == *y)),
-        [ConsList(x), ConsList(y)] => if x.car != y.car { Ok(Bool(false)) } else { eqv(&[x.cdr.clone(), y.cdr.clone()]) },
+        [ConsList(x), ConsList(y)] => if x.car != y.car { Ok(Bool(false)) } else { eqv(&[x.cdr.as_ref().clone(), y.cdr.as_ref().clone()]) },
         _ => Err(NumArgs(2, Nil)), // todo: fix err
     }
 }

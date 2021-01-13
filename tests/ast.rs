@@ -38,7 +38,7 @@ fn test_render_one_item_list() {
         "{}",
         ConsList(Rc::new(Cons {
             car: Rc::new(Number(1)),
-            cdr: Nil
+            cdr: Rc::new(Nil)
         }))
     );
     assert_eq!(s, "(1)")
