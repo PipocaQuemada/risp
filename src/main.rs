@@ -12,7 +12,7 @@ fn repl() {
     let mut rl = rustyline::Editor::<()>::new();
     let mut env = HashMap::new();
     loop {
-        match rl.readline("risp λ") {
+        match rl.readline("risp λ  ") {
             Ok(s) => {
                 rl.add_history_entry(s.as_str());
                 match s.as_str() {

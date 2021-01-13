@@ -49,9 +49,14 @@ fn test_parse_expr() {
         let a = all_consuming(parser_combinator::expr)(string);
         assert_eq!(a.map(|e| format!("{}", e.1)), Ok(string.to_string()))
     }
+    fn parse_to_success(string: &str, to: &str) {
+        let a = all_consuming(parser_combinator::expr)(string);
+        assert_eq!(a.map(|e| format!("{}", e.1)), Ok(to.to_string()))
+    }
     parseSuccess("cons");
     parseSuccess("1");
     parseSuccess("()");
+    parse_to_success("'()", "(quote ())");
     parseSuccess("(1)");
     parseSuccess("(1 2)");
     parseSuccess("\"1\"");

@@ -18,17 +18,28 @@ fn parse(expr: &str) -> Result<LispVal, LispErr> {
     parser_combinator::scheme(expr)
 }
 
-#[test]
-fn test_car() {
-    let expr = eval_str("(car (cons 1 2))");
-    let res = parse("1");
+fn evals_to(e: &str, to: &str) {
+    let expr = eval_str(e);
+    let res = parse(to);
     assert_eq!(expr, res)
 }
 
 #[test]
+fn test_cons() {
+    evals_to("(cons 1 '())", "(1)");
+    evals_to("(cons 2 (cons 1 '()))", "(2 1)");
+    evals_to("(cons 3 (cons 2 (cons 1 '())))", "(3 2 1)");
+}
+
+#[test]
+fn test_car() {
+    evals_to("(car (cons 1 2))", "1");
+}
+
+#[test]
 fn test_cdr() {
-    let expr = eval_str("(cdr (cons 1 2))");
-    let res = parse("2");
-    assert_eq!(expr, res)
+    evals_to("(cdr (cons 1 2))", "2");
+    evals_to("(cdr '(1))", "()");
+    evals_to("(cdr '((1 2 3) 4))", "(4)");
 }
 

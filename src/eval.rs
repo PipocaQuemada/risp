@@ -12,12 +12,13 @@ pub fn eval(env: &mut Env, e: &LispVal) -> Result<LispVal, LispErr> {
     // to get around that, transform the cons list into a slice
     // problem: Atom("foo") and cons(Atom("foo", Nil)) will both be transformed to [Atom("foo")], so we need to test to see if we're matching on a list or not.
     match e.iter().collect::<Vec<&LispVal>>().as_slice() {
-        [Nil] | [Number(_)] | [Str(_)] | [Bool(_)] if !e.is_cons() => Ok(e.clone()),
+        [Number(_)] | [Str(_)] | [Bool(_)] if !e.is_cons() => Ok(e.clone()),
+        [] if *e == Nil => Ok(e.clone()),
         [Atom(a)] if !e.is_cons() => env
             .get(a)
             .cloned()
             .ok_or_else(|| UnboundVar("Retrieved an unbound variable".to_string(), a.clone())),
-        [Atom(quote), ..] if quote == "quote" => e.cdr(),
+        [Atom(quote), quoted] if quote == "quote" => Ok((*quoted).clone()),
         [Atom(set), Atom(var), form] if set == "set!" => set_var(env, var.to_string(), form),
         [Atom(define), Atom(var), form] if define == "define" => {
             define_var(env, var.to_string(), form)
@@ -80,6 +81,7 @@ pub fn apply(func: &str, args: &[LispVal]) -> Result<LispVal, LispErr> {
 
 pub fn apply_prim(func: &str, args: &[LispVal]) -> Option<Result<LispVal, LispErr>> {
     match func {
+        "debug" => Some(print_debug(args)),
         "+" => Some(monoidal_numeric_op(|x, y| x + y, 0, args)),
         "*" => Some(monoidal_numeric_op(|x, y| x * y, 1, args)),
         "quotient" =>  Some(binary_numeric_op(|x, y| Number(x / y), args)),
@@ -109,6 +111,13 @@ pub fn apply_prim(func: &str, args: &[LispVal]) -> Option<Result<LispVal, LispEr
     }
 }
 
+pub fn print_debug(args: &[LispVal]) -> Result<LispVal, LispErr> {
+    for arg in args.iter() {
+        println!("{:?}", arg)
+    }
+    Ok(args[0].clone())
+}
+
 pub fn eqv(args: &[LispVal]) -> Result<LispVal, LispErr> {
     match args {
         [Number(x), Number(y)] => Ok(Bool(*x == *y)),
@@ -117,6 +126,7 @@ pub fn eqv(args: &[LispVal]) -> Result<LispVal, LispErr> {
         [Str(x), Str(y)] => Ok(Bool(*x == *y)),
         [Bool(x), Bool(y)] => Ok(Bool(*x == *y)),
         [ConsList(x), ConsList(y)] => if x.car != y.car { Ok(Bool(false)) } else { eqv(&[x.cdr.as_ref().clone(), y.cdr.as_ref().clone()]) },
+        [_, _] => Ok(Bool(false)), // no implicit conversions
         _ => Err(NumArgs(2, Nil)), // todo: fix err
     }
 }
