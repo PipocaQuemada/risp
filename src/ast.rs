@@ -1,3 +1,4 @@
+use crate::eval::Env;
 use std::fmt;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -23,6 +24,13 @@ pub enum LispVal {
     Number(i32),
     Str(String),
     Bool(bool),
+    Func {
+        params: Vec<String>,
+        vararg: Option<String>,
+        body: Vec<LispVal>,
+        env: Env,
+    },
+    //PrimitiveFunc(Func)
 }
 
 impl LispVal {
@@ -35,10 +43,11 @@ impl LispVal {
 
     pub fn car(&self) -> Result<LispVal, LispErr> {
         match self {
-            ConsList(c) => Ok(c.car.as_ref().clone()),  
+            ConsList(c) => Ok(c.car.as_ref().clone()),
             _ => Err(TypeMismatch(
                 "Expected an cons cell".to_string(),
-                self.clone())),
+                self.clone(),
+            )),
         }
     }
 
@@ -82,7 +91,6 @@ impl LispVal {
             )),
         }
     }
-
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -92,6 +100,14 @@ pub struct Cons {
 }
 
 impl Cons {
+    pub fn is_dotted(&self) -> bool {
+        match self.cdr.as_ref() {
+            ConsList(cons) => cons.is_dotted(),
+            Nil => false,
+            _ => true,
+        }
+    }
+
     fn fmt_cons(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (&*self.car).fmt(f)?;
 
@@ -111,8 +127,36 @@ impl Cons {
 }
 impl fmt::Display for LispVal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // write!(f, "({}, {})", self.x, self.y)
+        fn spaced<T: fmt::Display>(vec: &Vec<T>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            // slightly hacky way to intercalate a space between every argument
+            let mut is_first = true;
+            for v in vec.iter() {
+                if (is_first) {
+                    is_first = false;
+                    write!(f, "{}", v)?;
+                } else {
+                    write!(f, " {}", v)?;
+                }
+            }
+            Ok(())
+        }
         match self {
+            Func {
+                params,
+                vararg,
+                body,
+                env,
+            } => {
+                write!(f, "(lambda (")?;
+                spaced(params, f)?;
+                for v in vararg.iter() {
+                    //
+                    write!(f, " . {}", v)?;
+                }
+                write!(f, ") ")?;
+                spaced(body, f)?;
+                write!(f, ")")
+            }
             Atom(s) => write!(f, "{}", s),
             Str(s) => write!(f, "\"{}\"", s),
             Number(i) => write!(f, "{}", i),

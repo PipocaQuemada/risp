@@ -23,14 +23,26 @@ pub fn eval(env: &mut Env, e: &LispVal) -> Result<LispVal, LispErr> {
         [Atom(define), Atom(var), form] if define == "define" => {
             define_var(env, var.to_string(), form)
         }
-        [Atom(iff), cond, if_branch, else_branch] if iff == "if" => {
-            match eval(env, cond) {
-                Ok(Bool(true)) => eval(env, if_branch),
-                Ok(Bool(false)) => eval(env, else_branch),
-                Ok(expr) => Err(TypeMismatch("if's condition must evaluate to a boolean".to_string(), expr)),
-                e@Err(_) => e
-            }
+        [Atom(define), ConsList(cons), body @ ..] if define == "define" => {
+            let func_name = match cons.as_ref().car.as_ref() {
+                Atom(name) => Ok(name.clone()),
+                _ => Err(BadSpecialForm(
+                    "Functions must have an atom as a name".to_string(),
+                    e.clone(),
+                )),
+            }?;
+            let func = define_func(env, cons.as_ref().cdr.as_ref(), body)?;
+            define_var(env, func_name, &func)
         }
+        [Atom(iff), cond, if_branch, else_branch] if iff == "if" => match eval(env, cond) {
+            Ok(Bool(true)) => eval(env, if_branch),
+            Ok(Bool(false)) => eval(env, else_branch),
+            Ok(expr) => Err(TypeMismatch(
+                "if's condition must evaluate to a boolean".to_string(),
+                expr,
+            )),
+            e @ Err(_) => e,
+        },
         [Atom(a), ..] => {
             let args = eval_args(env, &(e.cdr()?))?;
             apply(&a, &args)
@@ -40,6 +52,22 @@ pub fn eval(env: &mut Env, e: &LispVal) -> Result<LispVal, LispErr> {
             e.clone(),
         )),
     }
+}
+
+pub fn define_func(env: &mut Env, args: &LispVal, body: &[&LispVal]) -> Result<LispVal, LispErr> {
+    let is_varargs = match args {
+        ConsList(cons) => cons.as_ref().is_dotted(),
+        _ => true, // no regular argument, just the vararg
+    };
+    let mut params: Vec<String> = args.iter().map(|l| format!("{}", l)).collect();
+    let vararg: Option<String> = if is_varargs { params.pop() } else { None };
+
+    Ok(Func {
+        params: params,
+        vararg: vararg,
+        body: body.into_iter().map(|l| (*l).clone()).collect(),
+        env: env.clone(),
+    })
 }
 
 pub fn define_var(env: &mut Env, var: String, form: &LispVal) -> Result<LispVal, LispErr> {
@@ -84,8 +112,9 @@ pub fn apply_prim(func: &str, args: &[LispVal]) -> Option<Result<LispVal, LispEr
         "debug" => Some(print_debug(args)),
         "+" => Some(monoidal_numeric_op(|x, y| x + y, 0, args)),
         "*" => Some(monoidal_numeric_op(|x, y| x * y, 1, args)),
-        "quotient" =>  Some(binary_numeric_op(|x, y| Number(x / y), args)),
+        "quotient" => Some(binary_numeric_op(|x, y| Number(x / y), args)),
         "remainder" => Some(binary_numeric_op(|x, y| Number(x % y), args)),
+        "mod" => Some(binary_numeric_op(|x, y| Number(x.rem_euclid(y)), args)),
         // todo: - and / should really take n args and work as negation/reciprocal for 1 arg
         "-" => Some(binary_numeric_op(|x, y| Number(x - y), args)),
         "/" => Some(binary_numeric_op(|x, y| Number(x / y), args)),
@@ -97,16 +126,33 @@ pub fn apply_prim(func: &str, args: &[LispVal]) -> Option<Result<LispVal, LispEr
         ">=" => Some(binary_numeric_op(|x, y| Bool(x >= y), args)),
         "<=" => Some(binary_numeric_op(|x, y| Bool(x <= y), args)),
 
-        "||" => Some(monoidal_op(|x, y| x || y, |b: &LispVal| b.boolean(),|b| Bool(b), true, args)),
-        "&&" => Some(monoidal_op(|x, y| x && y, |b: &LispVal| b.boolean(),|b| Bool(b), false, args)),
+        "string-=?" => Some(binary_string_op(|x, y| Bool(x == y), args)),
+        "string->?" => Some(binary_string_op(|x, y| Bool(x > y), args)),
+        "string-<?" => Some(binary_string_op(|x, y| Bool(x < y), args)),
+        "string->=?" => Some(binary_string_op(|x, y| Bool(x >= y), args)),
+        "string-<=?" => Some(binary_string_op(|x, y| Bool(x <= y), args)),
+
+        "||" => Some(monoidal_op(
+            |x, y| x || y,
+            |b: &LispVal| b.boolean(),
+            |b| Bool(b),
+            true,
+            args,
+        )),
+        "&&" => Some(monoidal_op(
+            |x, y| x && y,
+            |b: &LispVal| b.boolean(),
+            |b| Bool(b),
+            false,
+            args,
+        )),
 
         "eq?" => Some(eqv(args)),
         "eqv?" => Some(eqv(args)),
         // todo: equal
-
-        "cons" => Some(binary_op( LispVal::cons, args)),
-        "car" => Some(unary_op( LispVal::car, args)),
-        "cdr" => Some(unary_op( LispVal::cdr, args)),
+        "cons" => Some(binary_op(LispVal::cons, args)),
+        "car" => Some(unary_op(LispVal::car, args)),
+        "cdr" => Some(unary_op(LispVal::cdr, args)),
         _ => None,
     }
 }
@@ -125,7 +171,13 @@ pub fn eqv(args: &[LispVal]) -> Result<LispVal, LispErr> {
         [Nil, Nil] => Ok(Bool(true)),
         [Str(x), Str(y)] => Ok(Bool(*x == *y)),
         [Bool(x), Bool(y)] => Ok(Bool(*x == *y)),
-        [ConsList(x), ConsList(y)] => if x.car != y.car { Ok(Bool(false)) } else { eqv(&[x.cdr.as_ref().clone(), y.cdr.as_ref().clone()]) },
+        [ConsList(x), ConsList(y)] => {
+            if x.car != y.car {
+                Ok(Bool(false))
+            } else {
+                eqv(&[x.cdr.as_ref().clone(), y.cdr.as_ref().clone()])
+            }
+        }
         [_, _] => Ok(Bool(false)), // no implicit conversions
         _ => Err(NumArgs(2, Nil)), // todo: fix err
     }
@@ -146,7 +198,21 @@ where
     F: Fn(LispVal, LispVal) -> LispVal,
 {
     match args {
-        [x, y] => Ok(f(x.clone(),y.clone())),
+        [x, y] => Ok(f(x.clone(), y.clone())),
+        _ => Err(NumArgs(2, Nil)), // todo: fix err
+    }
+}
+
+pub fn binary_string_op<F>(f: F, args: &[LispVal]) -> Result<LispVal, LispErr>
+where
+    F: Fn(&str, &str) -> LispVal,
+{
+    match args {
+        [Str(x), Str(y)] => Ok(f(&x, &y)),
+        [_, _] => Err(TypeMismatch(
+            "Wrong type arguments for primive function".to_string(),
+            Nil,
+        )), // todo: fix err
         _ => Err(NumArgs(2, Nil)), // todo: fix err
     }
 }
@@ -156,13 +222,22 @@ where
     F: Fn(i32, i32) -> LispVal,
 {
     match args {
-        [Number(x), Number(y)] => Ok(f(*x,*y)),
-        [_, _] => Err(TypeMismatch("Wrong type arguments for primive function".to_string(), Nil)), // todo: fix err
+        [Number(x), Number(y)] => Ok(f(*x, *y)),
+        [_, _] => Err(TypeMismatch(
+            "Wrong type arguments for primive function".to_string(),
+            Nil,
+        )), // todo: fix err
         _ => Err(NumArgs(2, Nil)), // todo: fix err
     }
 }
 
-pub fn monoidal_op<F, G, H, A>(f: F, from_lispval: G, to_lispval: H, init: A, args: &[LispVal]) -> Result<LispVal, LispErr>
+pub fn monoidal_op<F, G, H, A>(
+    f: F,
+    from_lispval: G,
+    to_lispval: H,
+    init: A,
+    args: &[LispVal],
+) -> Result<LispVal, LispErr>
 where
     F: Fn(A, A) -> A,
     G: Fn(&LispVal) -> Result<A, LispErr>,
@@ -186,4 +261,3 @@ where
     })?;
     Ok(Number(res))
 }
-
